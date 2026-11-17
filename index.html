@@ -18,7 +18,7 @@ let fighter=null,enemy=null,clock=new THREE.Clock(),state={hp:100,ehp:100,act:'i
 function rigCharacter(root,scale=1,position=new THREE.Vector3(),rotationY=0,enemyTint=false){
  const source=[];root.traverse(o=>{if(o.isMesh)source.push(o)});if(!source.length)throw Error('Malha não encontrada');
  const old=source[0], parent=old.parent, skinned=new THREE.SkinnedMesh(old.geometry.clone(),old.material.clone());
- skinned.name='MuayThaiSkinnedMesh';skinned.position.set(0,0,0);skinned.scale.setScalar(scale);skinned.castShadow=true;skinned.receiveShadow=true;
+ skinned.name='MuayThaiSkinnedMesh';skinned.position.set(0,0,0);skinned.scale.setScalar(1);skinned.castShadow=true;skinned.receiveShadow=true;
  if(enemyTint){skinned.material=Array.isArray(skinned.material)?skinned.material.map(m=>m.clone()):skinned.material.clone();for(const m of (Array.isArray(skinned.material)?skinned.material:[skinned.material])){m.color.set(0xccaaff);m.emissive=new THREE.Color(0x26001f);m.emissiveIntensity=.25}}
  parent.remove(old);parent.add(skinned);
  const V=(x,y,z=0)=>new THREE.Vector3(x,y,z); // joints in centered GLB mesh coordinates
@@ -37,17 +37,17 @@ function rigCharacter(root,scale=1,position=new THREE.Vector3(),rotationY=0,enem
  root.updateMatrixWorld(true);
  // Nearest-joint smooth skin weights, normalized per vertex. Deliberately exclude opposite-side limbs.
  const geo=skinned.geometry, pos=geo.getAttribute('position'), names=Object.keys(pts), ids=new Uint16Array(pos.count*4), ws=new Float32Array(pos.count*4);
- function group(n){if(n.startsWith('L'))return 'L';if(n.startsWith('R'))return 'R';if(['pelvis','Lhip','Rhip','Lknee','Rknee','Lankle','Rankle','Lfoot','Rfoot'].includes(n))return 'lower';return 'upper'}
+ function zone(n){if(['pelvis','Lhip','Rhip','Lknee','Rknee','Lankle','Rankle','Lfoot','Rfoot'].includes(n))return 'lower';if(['chest','neck','head'].includes(n))return 'torso';return n.startsWith('L')?'L':'R'}
  for(let i=0;i<pos.count;i++){
-   let x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i), g=y<-.015?'lower':'upper';
-   let candidates=names.filter(n=>{let q=group(n);return q==='lower'?g==='lower':q==='upper'?g==='upper':true});
+   let x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i), g=y<-.03?'lower':'upper', side=x<-.008?'L':x>.008?'R':null;
+   let candidates=names.filter(n=>{let q=zone(n);if(g==='lower')return q==='lower'&&(q==='lower'?(!n.startsWith('L')&&!n.startsWith('R')||!side||n.startsWith(side)):true);return q==='torso'||(q===side&&side!==null)});
    candidates.sort((a,b)=>{let A=pts[a],B=pts[b],da=(x-A.x)**2+(y-A.y)**2+(z-A.z)**2,db=(x-B.x)**2+(y-B.y)**2+(z-B.z)**2;return da-db});
    let top=candidates.slice(0,4), vals=top.map(n=>1/Math.max(0.001,((x-pts[n].x)**2+(y-pts[n].y)**2+(z-pts[n].z)**2)));
    let sum=vals.reduce((a,b)=>a+b,0)||1;for(let k=0;k<4;k++){ids[i*4+k]=Object.keys(bones).findIndex(n=>bones[n].userData.joint===top[k]);ws[i*4+k]=vals[k]/sum;}
  }
  geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(ids,4));geo.setAttribute('skinWeight',new THREE.Float32BufferAttribute(ws,4));
  let skeleton=new THREE.Skeleton(Object.values(bones));skinned.bind(skeleton);skinned.normalizeSkinWeights();
- const rig=new THREE.Group();rig.name='NewMuayThaiRig';rig.position.y=.5;root.add(rig); // parent container for placement/orientation
+ const rig=new THREE.Group();rig.name='NewMuayThaiRig';rig.position.y=.5;rig.scale.setScalar(scale);root.add(rig); // parent container for placement/orientation
  // model and its bone tree must move together. Put both under a wrapper, preserving the skeleton bind pose.
  root.remove(skinned);root.remove(pelvis);rig.add(skinned);rig.add(pelvis);root.position.copy(position);root.rotation.y=rotationY;
  // place bones at the mesh origin before binding; root bone points and mesh offset are in aligned coordinates.
